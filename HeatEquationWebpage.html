@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Heat equation lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600&family=Newsreader:opsz,wght@6..72,500;6..72,700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#E8EDF0;--panel:#FAFBFB;--ink:#14202E;--muted:#5A6A7A;--line:#CBD5DC;--num:#1F4E8C;--ana:#D9730D;--bad:#B3261E}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 Figtree,system-ui,sans-serif}
+header{padding:28px 28px 8px;max-width:1280px;margin:0 auto}
+h1{font:700 clamp(30px,4.4vw,52px)/1.05 Newsreader,Georgia,serif;margin:0 0 8px;letter-spacing:-.01em}
+header p{margin:0;max-width:62ch;color:var(--muted)}
+main{display:grid;grid-template-columns:310px 1fr;gap:18px;max-width:1280px;margin:0 auto;padding:18px 28px 28px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px}
+.f{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+label,.lab{font-weight:600;font-size:13px}
+select,input[type=number],input[type=text]{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:4px;background:#fff;color:var(--ink);width:100%}
+input[type=range]{width:100%;accent-color:var(--num)}
+button{font:inherit;font-weight:600;padding:6px 10px;border:1px solid var(--ink);background:var(--ink);color:#fff;border-radius:4px;cursor:pointer}
+button.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+button:hover{border-color:var(--num)}
+:focus-visible{outline:2px solid var(--num);outline-offset:2px}
+.row{display:flex;gap:8px}.row>*{flex:1}
+.presets{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.presets button{text-align:left;font-weight:400;font-size:13px}
+.stage{display:flex;flex-direction:column;gap:14px;min-width:0}
+canvas{display:block;width:100%;background:#fff;border:1px solid var(--line);border-radius:4px}
+#cv1{height:340px}#cv2,#cv3{height:260px}#cv4{height:480px;cursor:grab;touch-action:none}#cv4:active{cursor:grabbing}
+.hint{font-size:13px;color:var(--muted);margin:8px 0 0}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.pair.one{grid-template-columns:1fr}
+.bar{display:flex;gap:12px;align-items:center;margin-bottom:10px}
+.bar input[type=range]{flex:1}.bar select{width:auto}
+.read{display:flex;flex-wrap:wrap;gap:6px 22px;font-size:14px;margin-top:10px;font-variant-numeric:tabular-nums}
+.read b{font-weight:600}.bad{color:var(--bad);font-weight:600}
+h2{font:700 20px Newsreader,Georgia,serif;margin:0 0 6px}
+.notes{font-size:14px;color:var(--muted)}.notes p{margin:4px 0;max-width:80ch}
+.hide{display:none!important}
+@media(max-width:900px){main{grid-template-columns:1fr;padding:14px}.pair{grid-template-columns:1fr}header{padding:20px 14px 4px}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Heat equation lab</h1>
+  <p>Solve ∂T/∂t = κ ∂²T/∂x² on a rod with three finite-difference schemes. Change the grid, the time step, the starting temperature, and the boundaries, then watch which choices hold up.</p>
+</header>
+<main>
+  <section class="panel" aria-label="Controls">
+    <div class="f"><label for="scheme">Scheme</label>
+      <select id="scheme"><option value="0">FTCS (explicit)</option><option value="1">Fully implicit</option><option value="0.5" selected>Crank–Nicolson</option></select></div>
+    <div class="f"><label for="bc">Boundary condition</label>
+      <select id="bc"><option value="dirichlet">Dirichlet: ends held at T = 0</option><option value="neumann">Neumann: insulated ends</option><option value="periodic">Periodic: rod bent into a ring</option></select></div>
+    <div class="f"><label for="ic">Starting temperature</label>
+      <select id="ic"><option value="const">Constant (T = 1)</option><option value="gauss" selected>Gaussian spike</option><option value="box">Hot slab</option><option value="sine">Sine wave</option><option value="random">Random noise</option><option value="custom">Custom f(x)</option></select></div>
+    <div class="f" id="parWrap"><label for="par" id="parL"></label><input type="range" id="par"><output id="parV"></output></div>
+    <div class="f hide" id="rerollWrap"><button class="ghost" id="reroll" type="button">New random noise</button></div>
+    <div class="f hide" id="exprWrap"><label for="expr">f(x), with x from −0.5 to 0.5</label><input type="text" id="expr" value="exp(-40*(x-0.15)**2) + 0.6*exp(-40*(x+0.2)**2)" spellcheck="false"></div>
+    <div class="row">
+      <div class="f"><label for="J">Intervals J</label><input type="number" id="J" value="40" min="8" max="200" step="1"></div>
+      <div class="f"><label for="dt">Time step Δt</label><input type="number" id="dt" value="0.0003125" step="any" min="0"></div>
+    </div>
+    <div class="row">
+      <div class="f"><label for="kappa">Conductivity κ</label><input type="number" id="kappa" value="1" step="any" min="0"></div>
+      <div class="f"><label for="tend">End time</label><input type="number" id="tend" value="1" step="any" min="0"></div>
+    </div>
+    <div class="f"><label for="tscale">Time axis in the surface and heat map</label>
+      <select id="tscale"><option value="2" selected>√t (expands early times)</option><option value="1">Linear t</option></select></div>
+    <button class="ghost" id="lim" type="button">Set Δt to the FTCS limit (α = ½)</button>
+    <div class="lab" style="margin-top:14px">Presets from the homework</div>
+    <div class="presets">
+      <button class="ghost" data-p="20,0.00125" type="button">J = 20, Δt = 0.00125 (at the FTCS limit)</button>
+      <button class="ghost" data-p="40,0.00125" type="button">J = 40, Δt = 0.00125 (FTCS blows up)</button>
+      <button class="ghost" data-p="40,0.0003125" type="button">J = 40, Δt = 0.0003125 (stable again)</button>
+    </div>
+  </section>
+
+  <div class="stage">
+    <section class="panel">
+      <div class="bar">
+        <button id="play" type="button">Play</button>
+        <input type="range" id="scrub" min="0" max="1000" value="0" aria-label="Time">
+        <select id="speed" aria-label="Playback speed"><option value="0.25">0.25×</option><option value="1" selected>1×</option><option value="3">3×</option></select>
+        <label style="display:flex;gap:6px;align-items:center;font-weight:400"><input type="checkbox" id="ana" checked> Analytic</label>
+      </div>
+      <canvas id="cv1" role="img" aria-label="Temperature profile at the selected time"></canvas>
+      <div class="read" id="read"></div>
+    </section>
+    <section class="panel">
+      <h2>Surface T(x, t)</h2>
+      <canvas id="cv4" role="img" aria-label="Interactive 3D surface of temperature over space and time"></canvas>
+      <p class="hint">Drag to rotate, scroll to zoom, double-click to reset. The dark curve is the profile at the current time.</p>
+    </section>
+    <div class="pair" id="pair">
+      <section class="panel"><h2>Space and time</h2><canvas id="cv2" role="img" aria-label="Heat map of temperature over space and time"></canvas></section>
+      <section class="panel" id="errP"><h2>Error against the analytic solution</h2><canvas id="cv3" role="img" aria-label="RMS error over time"></canvas></section>
+    </div>
+    <section class="panel notes">
+      <h2>What is being solved</h2>
+      <p>With α = κΔt/Δx², FTCS updates T by T + α·(second difference) and is only stable for α ≤ ½. Fully implicit solves (I − αD)Tⁿ⁺¹ = Tⁿ at every step. Crank–Nicolson averages the two: (I − αD/2)Tⁿ⁺¹ = (I + αD/2)Tⁿ. The implicit solves use the Thomas algorithm for tridiagonal systems, plus a Sherman–Morrison correction for the periodic ring.</p>
+      <p>The analytic curve expands the starting temperature in the eigenmodes of the chosen boundaries (sines, cosines, or both) and decays each one by exp(−κλ²t). Built from PHYS 332 Homework 03 by Akul Khanna.</p>
+    </section>
+  </div>
+</main>
+
+<script>
+const $=id=>document.getElementById(id), PI=Math.PI, XMIN=-0.5, L=1;
+const IC={
+  const:{},
+  gauss:{lab:'Sharpness a in exp(−a x²)',min:1,max:200,step:1,def:10},
+  box:{lab:'Slab half-width',min:.02,max:.45,step:.01,def:.15},
+  sine:{lab:'Mode number k',min:1,max:12,step:1,def:1},
+  random:{},custom:{}
+};
+const tp=()=>+$('tscale').value, rowAt=(u,N)=>Math.round(Math.pow(u,tp())*(N-1));
+function niceTicks(lo,hi,n=4){const raw=(hi-lo)/n,p=Math.pow(10,Math.floor(Math.log10(raw))),f=raw/p,st=(f<1.5?1:f<3?2:f<7?5:10)*p,r=[];for(let v=Math.ceil(lo/st-1e-9)*st;v<=hi+1e-9;v+=st)r.push(+v.toPrecision(12));return r}
+let S=null,pos=0,playing=true,last=0,seed=1,rnd=null;
+
+function mulberry(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+
+function makeIC(kind,p,J,bc){
+  const dx=L/J, s=x=>x-XMIN;
+  switch(kind){
+    case'const':return x=>1;
+    case'gauss':return x=>Math.exp(-p*x*x);
+    case'box':return x=>Math.abs(x)<p?1:0;
+    case'sine':return x=>Math.sin((bc==='periodic'?2:1)*p*PI*s(x)/L);
+    case'random':{const r=mulberry(seed),R=Array.from({length:J+1},()=>1+r());return x=>R[Math.max(0,Math.min(J,Math.round(s(x)/dx)))]}
+    default:{const f=new Function('x','with(Math){return ('+$('expr').value+')}');f(0);return f}
+  }
+}
+
+/* ---------- numerical core ---------- */
+function tridag(a,b,c,r,x,g){
+  const n=b.length;let bet=b[0];x[0]=r[0]/bet;
+  for(let j=1;j<n;j++){g[j]=c[j-1]/bet;bet=b[j]-a[j]*g[j];x[j]=(r[j]-a[j]*x[j-1])/bet}
+  for(let j=n-2;j>=0;j--)x[j]-=g[j+1]*x[j+1];
+}
+function solveNumerical(P){
+  const {J,kappa,tend,theta,bc,f}=P, J1=J+1, dx=L/J;
+  let N=Math.max(2,Math.round(tend/P.dt)+1);
+  if(N*J1>6e6)throw new Error('Too many steps (N = '+N+'). Raise Δt, lower J, or shorten the run.');
+  const dt=tend/(N-1), alpha=kappa*dt/(dx*dx);
+  const per=bc==='periodic', n=bc==='dirichlet'?J-1:bc==='neumann'?J+1:J, i0=bc==='dirichlet'?1:0;
+  const lo=new Float64Array(n).fill(1),di=new Float64Array(n).fill(-2),up=new Float64Array(n).fill(1);
+  if(!per){lo[0]=0;up[n-1]=0}
+  if(bc==='neumann'){up[0]=2;lo[n-1]=2}
+  const T=new Float64Array(N*J1);
+  let u=new Float64Array(n),rhs=new Float64Array(n),w=new Float64Array(n),g=new Float64Array(n),z=new Float64Array(n),q=new Float64Array(n);
+  for(let i=0;i<n;i++)u[i]=f(XMIN+(i+i0)*dx);
+  const ta=lo.map(v=>-theta*alpha*v),tb=di.map(v=>1-theta*alpha*v),tc=up.map(v=>-theta*alpha*v);
+  // cyclic (Sherman–Morrison) setup
+  let gam=0,bb=tb;
+  if(per&&theta>0){gam=-tb[0];bb=Float64Array.from(tb);bb[0]-=gam;bb[n-1]-=tc[n-1]*ta[0]/gam}
+  const D=(v,out)=>{for(let i=0;i<n;i++){
+    const l=i>0?v[i-1]:(per?v[n-1]:0), r=i<n-1?v[i+1]:(per?v[0]:0);
+    out[i]=lo[i]*l+di[i]*v[i]+up[i]*r}};
+  const store=k=>{const o=k*J1;for(let i=0;i<n;i++)T[o+i+i0]=u[i];if(per)T[o+J]=T[o]};
+  store(0);
+  for(let k=1;k<N;k++){
+    D(u,w);
+    for(let i=0;i<n;i++)rhs[i]=u[i]+(1-theta)*alpha*w[i];
+    if(theta===0){u=Float64Array.from(rhs)}
+    else if(!per){tridag(ta,tb,tc,rhs,u,g)}
+    else{
+      tridag(ta,bb,tc,rhs,w,g);
+      q.fill(0);q[0]=gam;q[n-1]=tc[n-1];
+      tridag(ta,bb,tc,q,z,g);
+      const fact=(w[0]+ta[0]*w[n-1]/gam)/(1+z[0]+ta[0]*z[n-1]/gam);
+      for(let i=0;i<n;i++)u[i]=w[i]-fact*z[i];
+    }
+    store(k);
+  }
+  const x=Float64Array.from({length:J1},(_,j)=>XMIN+j*dx), t=Float64Array.from({length:N},(_,k)=>k*dt);
+  return {J,J1,N,T,x,t,dt,alpha};
+}
+
+/* ---------- analytic solution via eigenmode expansion ---------- */
+function buildAnalytic(f,bc,J,kappa){
+  const K=bc==='periodic'?100:200,M=2048,h=L/M,modes=[],add=(lam,w,phi)=>modes.push({lam,w,phi});
+  if(bc==='dirichlet')for(let k=1;k<=K;k++)add(k*PI/L,2/L,s=>Math.sin(k*PI*s/L));
+  else if(bc==='neumann')for(let k=0;k<=K;k++)add(k*PI/L,k?2/L:1/L,s=>Math.cos(k*PI*s/L));
+  else{add(0,1/L,s=>1);for(let k=1;k<=K;k++){add(2*PI*k/L,2/L,s=>Math.cos(2*PI*k*s/L));add(2*PI*k/L,2/L,s=>Math.sin(2*PI*k*s/L))}}
+  const fv=Float64Array.from({length:M},(_,m)=>f(XMIN+(m+.5)*h)),J1=J+1;
+  const c=new Float64Array(modes.length),Phi=new Float64Array(modes.length*J1);
+  modes.forEach((md,i)=>{let a=0;for(let m=0;m<M;m++)a+=fv[m]*md.phi((m+.5)*h);c[i]=md.w*a*h;
+    for(let j=0;j<J1;j++)Phi[i*J1+j]=md.phi(j*L/J)});
+  return (tt,out)=>{out.fill(0);modes.forEach((md,i)=>{const e=c[i]*Math.exp(-kappa*md.lam*md.lam*tt);
+    if(e!==0)for(let j=0;j<J1;j++)out[j]+=e*Phi[i*J1+j]});return out};
+}
+
+/* ---------- run ---------- */
+function run(){
+  const out=$('read');
+  try{
+    const kind=$('ic').value,bc=$('bc').value,J=Math.max(8,Math.min(200,Math.round(+$('J').value)||40));
+    const P={J,dt:+$('dt').value,kappa:+$('kappa').value,tend:+$('tend').value,theta:+$('scheme').value,bc,
+      f:null};
+    if(!(P.dt>0&&P.kappa>0&&P.tend>0))throw new Error('Δt, κ and the end time must be positive.');
+    const raw=makeIC(kind,+$('par').value,J,bc);
+    P.f=x=>{const v=raw(x);return isFinite(v)?v:0};
+    const f0=P.f;
+    if(bc==='dirichlet')P.f=x=>f0(x);
+    const R=solveNumerical(P);
+    R.theta=P.theta;R.bc=bc;
+    // initial profile (walls forced to 0 for Dirichlet, as in the homework)
+    R.y0=Array.from(R.T.subarray(0,R.J1));
+    R.y0min=Math.min(...R.y0);R.y0max=Math.max(...R.y0);
+    const afn=buildAnalytic(P.f,bc,J,P.kappa);R.afn=afn;R.ay=new Float64Array(R.J1);
+    // error history (about 200 sampled times)
+    const ns=Math.min(R.N,200);R.et=[];R.ev=[];let sum=0;
+    const tmp=new Float64Array(R.J1);
+    for(let s=0;s<ns;s++){const k=Math.round(s*(R.N-1)/(ns-1||1));afn(R.t[k],tmp);let e=0;
+      for(let j=0;j<R.J1;j++){const d=R.T[k*R.J1+j]-tmp[j];e+=d*d}
+      e=Math.sqrt(e/R.J1);R.et.push(R.t[k]);R.ev.push(e);sum+=e}
+    R.meanErr=sum/ns;
+    R.off=heatImage(R);buildG3(R);S=R;pos=0;playing=true;$('play').textContent='Pause';
+    setPos(0);
+  }catch(e){S=null;out.innerHTML='<span class="bad">'+e.message+'</span>';drawAll()}
+}
+
+/* ---------- drawing ---------- */
+function color(v){if(!isFinite(v))return[120,120,120];v=Math.max(0,Math.min(1,v));
+  const c=x=>Math.round(255*Math.max(0,Math.min(1,x)));
+  return[c(Math.abs(2*v-.5)),c(Math.sin(v*PI)),c(Math.cos(v*PI/2))]}   // matplotlib "rainbow"
+const LUT=Array.from({length:256},(_,i)=>{const c=color(i/255);return 'rgb('+c[0]+','+c[1]+','+c[2]+')'});
+function heatImage(R){
+  const rows=Math.min(R.N,300),c=document.createElement('canvas');c.width=R.J1;c.height=rows;
+  const g=c.getContext('2d'),im=g.createImageData(R.J1,rows);
+  let lo=R.y0min,hi=R.y0max;if(hi-lo<1e-12){lo-=1;hi+=1}
+  for(let r=0;r<rows;r++){const k=rowAt(r/(rows-1||1),R.N);
+    for(let j=0;j<R.J1;j++){const col=color((R.T[k*R.J1+j]-lo)/(hi-lo)),o=(r*R.J1+j)*4;
+      im.data[o]=col[0];im.data[o+1]=col[1];im.data[o+2]=col[2];im.data[o+3]=255}}
+  g.putImageData(im,0,0);return c}
+function setup(c){const r=c.getBoundingClientRect(),d=devicePixelRatio||1,w=Math.round(r.width*d),h=Math.round(r.height*d);
+  if(c.width!==w)c.width=w;if(c.height!==h)c.height=h;
+  const g=c.getContext('2d');g.setTransform(d,0,0,d,0,0);g.clearRect(0,0,r.width,r.height);g.font='12px Figtree,system-ui,sans-serif';return[g,r.width,r.height]}
+const fmt=v=>(Math.abs(v)>=1e5||(v!==0&&Math.abs(v)<1e-3))?v.toExponential(0):+v.toPrecision(2);
+function axes(g,W,H,m,xr,yr,xt,yt){
+  g.strokeStyle='#CBD5DC';g.fillStyle='#5A6A7A';g.lineWidth=1;g.textAlign='center';
+  xt.forEach(v=>{const X=m.l+(v-xr[0])/(xr[1]-xr[0])*(W-m.l-m.r);g.beginPath();g.moveTo(X,m.t);g.lineTo(X,H-m.b);g.stroke();g.fillText(fmt(v),X,H-m.b+16)});
+  g.textAlign='right';
+  yt.forEach(v=>{const Y=H-m.b-(v-yr[0])/(yr[1]-yr[0])*(H-m.t-m.b);g.beginPath();g.moveTo(m.l,Y);g.lineTo(W-m.r,Y);g.stroke();g.fillText(fmt(v),m.l-6,Y+4)})}
+const ticks=(a,b,n)=>Array.from({length:n+1},(_,i)=>a+(b-a)*i/n);
+
+function drawProfile(){
+  const[g,W,H]=setup($('cv1'));if(!S)return;
+  const k=S.i,o=k*S.J1,row=S.T.subarray(o,o+S.J1),m={l:56,r:14,t:30,b:30};
+  let lo=S.y0min,hi=S.y0max;for(const v of row)if(isFinite(v)){lo=Math.min(lo,Math.max(v,-1e9));hi=Math.max(hi,Math.min(v,1e9))}
+  if(hi-lo<1e-9){lo-=1;hi+=1}const pad=(hi-lo)*.08;lo-=pad;hi+=pad;
+  axes(g,W,H,m,[XMIN,XMIN+L],[lo,hi],ticks(XMIN,XMIN+L,4),niceTicks(lo,hi));
+  const X=x=>m.l+(x-XMIN)/L*(W-m.l-m.r),Y=v=>H-m.b-(Math.max(lo,Math.min(hi,v))-lo)/(hi-lo)*(H-m.t-m.b);
+  const line=(arr,col,w,dash)=>{g.beginPath();g.strokeStyle=col;g.lineWidth=w;g.setLineDash(dash||[]);
+    arr.forEach((v,j)=>{j?g.lineTo(X(S.x[j]),Y(v)):g.moveTo(X(S.x[0]),Y(v))});g.stroke();g.setLineDash([])};
+  line(S.y0,'#B7C2CB',1.5,[3,4]);
+  if($('ana').checked){S.afn(S.t[k],S.ay);line(Array.from(S.ay),'#D9730D',5.5,[9,6])}
+  line(Array.from(row),'#1F4E8C',2.2);
+  if(S.J<=60){g.fillStyle='#1F4E8C';row.forEach((v,j)=>{g.beginPath();g.arc(X(S.x[j]),Y(v),3,0,2*PI);g.fill()})}
+  g.textAlign='left';g.fillStyle='#14202E';g.font='600 13px Figtree,system-ui,sans-serif';g.fillText('t = '+S.t[k].toFixed(4),m.l,18);
+  g.font='12px Figtree,system-ui,sans-serif';let lx=W-m.r;
+  [['numerical','#1F4E8C'],['analytic','#D9730D'],['start','#B7C2CB']].reverse().forEach(([s,c])=>{
+    if(s==='analytic'&&!$('ana').checked)return;g.textAlign='right';g.fillStyle='#5A6A7A';g.fillText(s,lx,18);
+    lx-=g.measureText(s).width+18;g.fillStyle=c;g.fillRect(lx,13,12,3);lx-=18});
+}
+function drawHeat(){
+  const[g,W,H]=setup($('cv2'));if(!S)return;const m={l:54,r:10,t:10,b:28},pw=W-m.l-m.r,ph=H-m.t-m.b;
+  g.imageSmoothingEnabled=false;g.drawImage(S.off,m.l,m.t,pw,ph);
+  g.strokeStyle='#14202E';g.lineWidth=1.5;const Y=m.t+S.u*ph;g.beginPath();g.moveTo(m.l,Y);g.lineTo(m.l+pw,Y);g.stroke();
+  g.fillStyle='#5A6A7A';g.textAlign='center';ticks(XMIN,XMIN+L,4).forEach(v=>g.fillText(fmt(v),m.l+(v-XMIN)/L*pw,H-10));
+  g.textAlign='right';const te=S.t[S.N-1];ticks(0,1,4).forEach(u=>g.fillText(fmt(te*Math.pow(u,tp())),m.l-5,m.t+u*ph+4));
+  g.save();g.translate(9,m.t+ph/2);g.rotate(-PI/2);g.textAlign='center';g.fillText(tp()===2?'t (√ scale)':'t',0,0);g.restore();
+}
+function drawErr(){
+  const[g,W,H]=setup($('cv3'));if(!S)return;const m={l:46,r:12,t:10,b:28};
+  const lv=S.ev.map(v=>isFinite(v)?Math.min(12,Math.log10(Math.max(v,1e-16))):12);
+  let lo=Math.min(...lv),hi=Math.max(...lv);if(hi-lo<1)hi=lo+1;const te=S.t[S.N-1];
+  axes(g,W,H,m,[0,te],[lo,hi],ticks(0,te,4),niceTicks(lo,hi));
+  const X=t=>m.l+t/te*(W-m.l-m.r),Y=v=>H-m.b-(v-lo)/(hi-lo)*(H-m.t-m.b);
+  g.beginPath();g.strokeStyle='#1F4E8C';g.lineWidth=2;lv.forEach((v,i)=>i?g.lineTo(X(S.et[i]),Y(v)):g.moveTo(X(S.et[i]),Y(v)));g.stroke();
+  g.strokeStyle='#14202E';g.lineWidth=1.5;g.beginPath();g.moveTo(X(S.t[S.i]),m.t);g.lineTo(X(S.t[S.i]),H-m.b);g.stroke();
+  g.fillStyle='#5A6A7A';g.textAlign='left';g.fillText('log10 rms error vs t',m.l+6,m.t+12);
+}
+/* ---------- 3D surface (painter's algorithm, no libraries) ---------- */
+const V={yaw:-.62,pitch:.62,zoom:1},HZ=.55;
+function buildG3(R){
+  const cols=Math.min(R.J1,70),rows=Math.min(R.N,70),js=[],ks=[];
+  for(let c=0;c<cols;c++)js.push(Math.round(c*R.J/(cols-1)));
+  for(let r=0;r<rows;r++)ks.push(rowAt(r/(rows-1),R.N));
+  const raw=new Float64Array(rows*cols);let dmin=Infinity,dmax=-Infinity,bad=false;
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){const v=R.T[ks[r]*R.J1+js[c]];raw[r*cols+c]=v;if(isFinite(v)){if(v<dmin)dmin=v;if(v>dmax)dmax=v}else bad=true}
+  const r0=Math.max(R.y0max-R.y0min,1e-9);
+  let zlo=Math.max(dmin,R.y0min-5*r0),zhi=Math.min(dmax,R.y0max+5*r0);
+  if(!(zhi-zlo>1e-9)){zlo-=.5;zhi+=.5}
+  const zn=raw.map(v=>isFinite(v)?Math.max(0,Math.min(1,(v-zlo)/(zhi-zlo))):.5);
+  R.g3={rows,cols,js,zn,zlo,zhi,key:'',order:null,clip:bad||dmin<zlo||dmax>zhi};
+}
+function draw3D(){
+  const[g,W,H]=setup($('cv4'));if(!S||!S.g3)return;
+  const G=S.g3,rows=G.rows,cols=G.cols,cy=Math.cos(V.yaw),sy=Math.sin(V.yaw),cp=Math.cos(V.pitch),sp=Math.sin(V.pitch);
+  const sc=Math.min(W*.5,H*.7)*V.zoom,ox=W/2,oy=H*.54;
+  const P=(X,Y,Z,o)=>{const x1=X*cy-Y*sy,y1=X*sy+Y*cy;o[0]=ox+sc*x1;o[1]=oy-sc*(Z*cp+y1*sp);o[2]=y1*cp-Z*sp};
+  const n=rows*cols,px=new Float64Array(n),py=new Float64Array(n),pd=new Float64Array(n),t3=[0,0,0];
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){const i=r*cols+c;P(c/(cols-1)-.5,r/(rows-1)-.5,(G.zn[i]-.5)*HZ,t3);px[i]=t3[0];py[i]=t3[1];pd[i]=t3[2]}
+  const key=V.yaw+','+V.pitch;
+  if(G.key!==key){const nq=(rows-1)*(cols-1),qd=new Float64Array(nq),ord=Array.from({length:nq},(_,q)=>q);
+    for(let q=0;q<nq;q++){const a=((q/(cols-1))|0)*cols+q%(cols-1);qd[q]=pd[a]+pd[a+1]+pd[a+cols]+pd[a+cols+1]}
+    ord.sort((a,b)=>qd[b]-qd[a]);G.order=ord;G.key=key}
+  g.lineWidth=.5;g.strokeStyle='rgba(20,32,46,.22)';g.lineJoin='round';
+  for(const q of G.order){const a=((q/(cols-1))|0)*cols+q%(cols-1),b=a+1,d=a+cols,e=d+1;
+    g.fillStyle=LUT[Math.round((G.zn[a]+G.zn[b]+G.zn[d]+G.zn[e])*63.75)];
+    g.beginPath();g.moveTo(px[a],py[a]);g.lineTo(px[b],py[b]);g.lineTo(px[e],py[e]);g.lineTo(px[d],py[d]);g.closePath();g.fill();g.stroke()}
+  // current-time profile
+  const Yc=Math.pow(S.i/(S.N-1),1/tp())-.5,pts=[];
+  for(let c=0;c<cols;c++){const v=S.T[S.i*S.J1+G.js[c]],zn=isFinite(v)?Math.max(0,Math.min(1,(v-G.zlo)/(G.zhi-G.zlo))):.5;
+    P(c/(cols-1)-.5,Yc,(zn-.5)*HZ,t3);pts.push([t3[0],t3[1]])}
+  [['#fff',5],['#14202E',2.4]].forEach(([col,w])=>{g.beginPath();g.strokeStyle=col;g.lineWidth=w;pts.forEach((p,i)=>i?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1]));g.stroke()});
+  // axes
+  const te=S.t[S.N-1],o=[0,0,0],tip=[0,0,0],z0=-HZ/2;P(-.5,-.5,z0,o);
+  g.strokeStyle='#14202E';g.fillStyle='#14202E';g.lineWidth=1.5;g.font='600 12px Figtree,system-ui,sans-serif';g.textAlign='center';
+  [[.5,-.5,z0,'x → '+(XMIN+L)],[-.5,.5,z0,'t → '+fmt(te)+(tp()===2?'  (√ scale)':'')],[-.5,-.5,HZ/2,'T → '+fmt(G.zhi)]].forEach(([X,Y,Z,lab])=>{
+    P(X,Y,Z,tip);g.beginPath();g.moveTo(o[0],o[1]);g.lineTo(tip[0],tip[1]);g.stroke();
+    const dx=tip[0]-o[0],dy=tip[1]-o[1],len=Math.hypot(dx,dy)||1;g.fillText(lab,tip[0]+dx/len*30,tip[1]+dy/len*14+4)});
+  g.textAlign='left';g.font='12px Figtree,system-ui,sans-serif';g.fillStyle='#5A6A7A';
+  g.fillText('origin: x = '+XMIN+', t = 0, T = '+fmt(G.zlo),12,H-12);
+  if(G.clip)g.fillText('Heights beyond 5× the starting range are clipped.',12,20);
+}
+function drawAll(){drawProfile();draw3D();drawHeat();drawErr()}
+function readout(){
+  if(!S)return;const a=S.alpha,bad=S.theta===0&&a>0.5;
+  $('read').innerHTML='<span>α = <b>'+a.toPrecision(4)+'</b></span><span>N = <b>'+S.N+'</b> points in time ('+(S.N-1)+' steps)</span><span>Δt used = <b>'+S.dt.toPrecision(4)+'</b></span>'
+   +(bad?'<span class="bad">FTCS is unstable here: α &gt; ½</span>':S.theta===0?'<span>FTCS is stable: α ≤ ½</span>':'<span>Unconditionally stable scheme</span>')
+   +(isFinite(S.meanErr)?'<span>mean rms error = <b>'+S.meanErr.toExponential(2)+'</b></span>':'');
+}
+function setPos(p){pos=Math.max(0,Math.min(1,p));if(!S)return;S.u=pos;S.i=rowAt(pos,S.N);$('scrub').value=Math.round(pos*1000);readout();drawAll()}
+
+/* ---------- UI ---------- */
+function syncIC(reset){
+  const k=$('ic').value,d=IC[k];
+  $('parWrap').classList.toggle('hide',!d.lab);$('rerollWrap').classList.toggle('hide',k!=='random');$('exprWrap').classList.toggle('hide',k!=='custom');
+  if(d.lab){const r=$('par');r.min=d.min;r.max=d.max;r.step=d.step;if(reset)r.value=d.def;$('parL').textContent=d.lab;$('parV').textContent=r.value}
+}
+let timer;const later=()=>{clearTimeout(timer);timer=setTimeout(run,80)};
+['scheme','bc','J','dt','kappa','tend','expr'].forEach(id=>$(id).addEventListener('input',later));
+$('ic').addEventListener('input',()=>{syncIC(true);later()});
+$('par').addEventListener('input',()=>{$('parV').textContent=$('par').value;later()});
+$('reroll').addEventListener('click',()=>{seed=Math.floor(Math.random()*1e9);run()});
+$('lim').addEventListener('click',()=>{const J=Math.round(+$('J').value),dx=L/J;$('dt').value=+(0.5*dx*dx/(+$('kappa').value||1)).toPrecision(6);run()});
+document.querySelectorAll('[data-p]').forEach(b=>b.addEventListener('click',()=>{const[J,dt]=b.dataset.p.split(',');$('J').value=J;$('dt').value=dt;$('kappa').value=1;$('tend').value=1;$('scheme').value='0';run()}));
+$('ana').addEventListener('input',()=>{$('errP').classList.toggle('hide',!$('ana').checked);$('pair').classList.toggle('one',!$('ana').checked);drawAll()});
+$('play').addEventListener('click',()=>{if(!playing&&pos>=1)pos=0;playing=!playing;$('play').textContent=playing?'Pause':'Play'});
+$('scrub').addEventListener('input',e=>{playing=false;$('play').textContent='Play';setPos(+e.target.value/1000)});
+addEventListener('resize',drawAll);
+$('tscale').addEventListener('input',()=>{if(!S)return;S.off=heatImage(S);buildG3(S);setPos(pos)});
+const cv4=$('cv4');let drag=null;
+cv4.addEventListener('pointerdown',e=>{drag=[e.clientX,e.clientY];cv4.setPointerCapture(e.pointerId)});
+cv4.addEventListener('pointermove',e=>{if(!drag)return;V.yaw+=(e.clientX-drag[0])*.01;V.pitch=Math.max(.05,Math.min(1.5,V.pitch+(e.clientY-drag[1])*.01));drag=[e.clientX,e.clientY];draw3D()});
+['pointerup','pointercancel'].forEach(ev=>cv4.addEventListener(ev,()=>{drag=null}));
+cv4.addEventListener('wheel',e=>{e.preventDefault();V.zoom=Math.max(.5,Math.min(2.5,V.zoom*Math.exp(-e.deltaY*.001)));draw3D()},{passive:false});
+cv4.addEventListener('dblclick',()=>{V.yaw=-.62;V.pitch=.62;V.zoom=1;draw3D()});
+function tick(ts){const d=Math.min(.1,(ts-last)/1000);last=ts;
+  if(playing&&S){const p=pos+d*(+$('speed').value)/6;if(p>=1){playing=false;$('play').textContent='Replay'}setPos(p)}
+  requestAnimationFrame(tick)}
+syncIC(true);run();requestAnimationFrame(tick);
+</script>
+</body>
+</html>
